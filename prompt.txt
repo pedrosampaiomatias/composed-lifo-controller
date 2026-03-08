@@ -1,0 +1,74 @@
+Task: Implement a Composed LIFO and Packet Generator System in SystemVerilog
+
+You are acting as a Digital ASIC Design Engineer. Your task is to write TWO SystemVerilog modules:
+1. `sync_lifo_parity`: A synchronous Last-In-First-Out (LIFO) stack with odd-parity checking and burst-awareness.
+2. `producer_fsm`: A state machine that generates 4-byte packets and manages the Fill/Drain phases of the LIFO.
+
+Both modules must be written in strict SystemVerilog (`always_ff`, `always_comb`, `logic`, etc.).
+
+=========================================
+MODULE 1: sync_lifo_parity
+=========================================
+Interface:
+module sync_lifo_parity #(
+    parameter int DATA_WIDTH = 8,
+    parameter int DEPTH      = 16,
+    parameter int BURST_SIZE = 4
+)(
+    input  logic                  clk,
+    input  logic                  rst_n,
+    input  logic                  push,
+    input  logic                  pop,
+    input  logic [DATA_WIDTH-1:0] data_in,
+    output logic [DATA_WIDTH-1:0] data_out,
+    output logic                  empty,
+    output logic                  full,
+    output logic                  parity_err,
+    output logic                  burst_ready
+);
+
+Behavioral Requirements:
+1. Core LIFO: Implement a standard synchronous stack. `data_out` updates on the clock edge when `pop` is asserted.
+2. Burst Ready: `burst_ready` must be driven high when the stack has enough remaining space to accept at least `BURST_SIZE` additional words without overflowing.
+3. Odd Parity Integrity: 
+   - When data is pushed, calculate the odd parity of `data_in` and store it internally alongside the data.
+   - When data is popped, verify the stored parity against the read data. If corrupted, assert `parity_err` high for the cycle the corrupted data is on `data_out`.
+4. Simultaneous Push/Pop Edge Case: 
+   - If `push` and `pop` are asserted on the same clock cycle, the module must perform a "write-through".
+   - `data_out` must immediately reflect `data_in` on the next clock edge.
+   - The top element of the stack memory must be overwritten with the new `data_in`.
+   - The stack pointer must NOT change.
+   - `parity_err` must be 0 during a write-through, as the data bypasses the internal memory array.
+
+=========================================
+MODULE 2: producer_fsm
+=========================================
+Interface:
+module producer_fsm (
+    input  logic       clk,
+    input  logic       rst_n,             
+    input  logic       lifo_burst_ready,  
+    input  logic       lifo_empty,        
+    output logic       push,              
+    output logic       pop,               
+    output logic [7:0] data_out           
+);
+
+Packet Structure:
+A single packet consists of exactly 4 bytes, sent over 4 consecutive clock cycles where `push` is high:
+1. Header: 8'hAA
+2. Payload High: Upper 8 bits of an internal 16-bit packet counter.
+3. Payload Low: Lower 8 bits of an internal 16-bit packet counter.
+4. Footer: 8'h55
+
+Behavioral Requirements:
+1. Phases: The system operates in two main phases: a Fill Phase and a Drain Phase. After reset, it must start in the Fill Phase.
+2. Fill Phase Rules:
+   - If `lifo_burst_ready` is high, the Producer must generate and `push` exactly one complete 4-byte packet.
+   - Once a packet transmission begins (Header is pushed), the Producer must complete the entire 4-byte packet without stalling, even if `lifo_burst_ready` changes state during the burst.
+   - The internal 16-bit packet counter starts at 16'd0. It must increment by 1 strictly AFTER a packet's Footer has been successfully pushed.
+   - After a packet finishes, if `lifo_burst_ready` is low, the FSM must immediately transition to the Drain Phase.
+3. Drain Phase Rules:
+   - The Producer must assert `pop` continuously to drain the LIFO.
+   - The Producer must not assert `push` during this phase.
+   - Once `lifo_empty` becomes high, the Producer must immediately transition back to the Fill Phase and evaluate `lifo_burst_ready` again.
