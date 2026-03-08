@@ -41,6 +41,7 @@ module producer_fsm (
     end
 
     // Combinational Next State and Output Decoding
+    // BUG: Pushes LSB before MSB (wrong byte order) — tests expect MSB then LSB
     always_comb begin
         // Default assignments to prevent inferred latches
         next_state = state;
@@ -66,14 +67,16 @@ module producer_fsm (
             end
 
             ST_PHIGH: begin
+                // BUG: Pushing LSB here instead of MSB
                 push       = 1'b1;
-                data_out   = pkt_cnt[15:8];
+                data_out   = pkt_cnt[7:0];
                 next_state = ST_PLOW;
             end
 
             ST_PLOW: begin
+                // BUG: Pushing MSB here instead of LSB
                 push       = 1'b1;
-                data_out   = pkt_cnt[7:0];
+                data_out   = pkt_cnt[15:8];
                 next_state = ST_FTR;
             end
 
