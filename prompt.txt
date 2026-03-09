@@ -41,6 +41,7 @@ Behavioral Requirements:
    - `parity_err` must be 0 during a write-through.
 4. Credit-Based Flow Control:
    - The LIFO manages a credit protocol to inform the Producer when space is available.
+   - `credit_valid` and `credit_amount` are combinational outputs (not registered).
    - Credits are issued in batches of `BURST_SIZE` when previously granted credits have been fully consumed and sufficient space remains.
    - The Producer must be able to observe and act on newly issued credits in the same cycle they are granted, without a pipeline delay.
 
@@ -67,7 +68,7 @@ A single packet consists of exactly 4 bytes, sent over 4 consecutive clock cycle
 4. Footer: CRC-8 of the preceding three packet bytes.
 
 CRC-8 Specification:
-- Algorithm: CRC-8/MAXIM
+- Algorithm: CRC-8/MAXIM (polynomial 0x31, init 0x00, process bits MSB-first)
 - The footer byte is the CRC computed over the Header, Payload High, and Payload Low bytes in that order.
 
 Behavioral Requirements:
@@ -75,7 +76,7 @@ Behavioral Requirements:
    - When `credit_valid` is asserted, the granted `credit_amount` is added to the balance.
    - Each push consumes one credit.
    - Both events can occur simultaneously.
-2. Phase Decision: The EVAL state decides whether to fill or drain. This decision must account for any credits being granted on the same cycle to avoid unnecessary drain transitions.
+2. Phase Decision: The EVAL state decides whether to fill or drain. The effective credit balance (current balance plus any same-cycle grant from `credit_valid`/`credit_amount`) must be used for this decision to avoid unnecessary drain transitions.
 3. Phases: The system operates in two main phases: Fill Phase and Drain Phase. After reset, it starts in the EVAL state which decides the phase.
 4. Fill Phase Rules:
    - Enter Fill Phase when sufficient credits are available for a complete packet.
