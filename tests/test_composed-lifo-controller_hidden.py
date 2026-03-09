@@ -430,8 +430,8 @@ def test_coverage_runner():
 
     sources = [
         proj_path / "golden" / "top_composed.sv",
-        proj_path / "golden" / "lifo_claude.sv",
-        proj_path / "golden" / "producer_fsm_claude.sv",
+        proj_path / "golden" / "lifo.sv",
+        proj_path / "golden" / "producer_fsm.sv",
     ]
 
     runner = get_runner(sim)
