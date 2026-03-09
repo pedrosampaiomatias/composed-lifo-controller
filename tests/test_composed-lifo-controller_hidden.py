@@ -429,9 +429,9 @@ def test_coverage_runner():
     proj_path = Path(__file__).resolve().parent.parent
 
     sources = [
-        proj_path / "golden" / "top_composed.sv",
-        proj_path / "golden" / "lifo.sv",
-        proj_path / "golden" / "producer_fsm.sv",
+        proj_path / "sources" / "top_composed.sv",
+        proj_path / "sources" / "lifo.sv",
+        proj_path / "sources" / "producer_fsm.sv",
     ]
 
     runner = get_runner(sim)
