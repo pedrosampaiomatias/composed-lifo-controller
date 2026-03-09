@@ -442,5 +442,5 @@ def test_coverage_runner():
     )
     runner.test(
         hdl_toplevel="top_composed_lifo",
-        test_module="test_composed_lifo_controller_hidden",
+        test_module="test_composed-lifo-controller_hidden",
     )
