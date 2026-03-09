@@ -3,7 +3,7 @@
 module sync_lifo_parity #(
     parameter int DATA_WIDTH = 8,
     parameter int DEPTH      = 16,
-    parameter int BURST_SIZE = 4   // Number of words required for a single packet
+    parameter int BURST_SIZE = 4   // Credit grant quantum
 )(
     input  logic                  clk,
     input  logic                  rst_n,
@@ -14,7 +14,9 @@ module sync_lifo_parity #(
     output logic                  empty,
     output logic                  full,
     output logic                  parity_err,
-    output logic                  burst_ready // High when enough space exists for a full packet
+    // Credit-based flow control
+    output logic                  credit_valid,   // High for 1 cycle when credits are issued
+    output logic [$clog2(DEPTH):0] credit_amount  // Number of credits being issued
 );
 
     localparam int SP_WIDTH = $clog2(DEPTH) + 1;
@@ -26,10 +28,6 @@ module sync_lifo_parity #(
 
     assign empty = (sp == '0);
     assign full  = (sp == DEPTH[SP_WIDTH-1:0]);
-
-    // Calculate if there is enough space for a burst.
-    // We compare against a constant computed at synthesis time to save area.
-    assign burst_ready = (sp <= (DEPTH[SP_WIDTH-1:0] - BURST_SIZE[SP_WIDTH-1:0]));
 
     logic push_valid;
     logic pop_valid;
@@ -43,6 +41,47 @@ module sync_lifo_parity #(
     
     assign in_parity  = ~^data_in; 
     assign write_word = {in_parity, data_in};
+
+    // ---------------------------------------------------------------
+    // Credit-based flow control
+    // ---------------------------------------------------------------
+    // `credits_outstanding` tracks how many of the previously granted
+    // credits have yet to be consumed by pushes.  A new batch of
+    // BURST_SIZE credits is issued only when:
+    //   1) credits_outstanding == 0 (previous batch fully consumed), AND
+    //   2) free space >= BURST_SIZE
+    //
+    // credit_valid / credit_amount are combinational outputs so the
+    // producer can latch the new credits on the same rising edge.
+    // credits_outstanding is updated sequentially.
+    // ---------------------------------------------------------------
+    logic [SP_WIDTH-1:0] credits_outstanding;
+    logic [SP_WIDTH-1:0] free_slots;
+
+    assign free_slots = DEPTH[SP_WIDTH-1:0] - sp;
+
+    // Combinational credit grant decision
+    assign credit_valid  = (credits_outstanding == '0) &&
+                           (free_slots >= BURST_SIZE[SP_WIDTH-1:0]);
+    assign credit_amount = credit_valid ? BURST_SIZE[$clog2(DEPTH):0] : '0;
+
+    // Sequential credit tracking
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            credits_outstanding <= '0;
+        end else begin
+            if (credit_valid && push_valid) begin
+                // New batch issued same cycle as a push: load batch minus 1
+                credits_outstanding <= BURST_SIZE[SP_WIDTH-1:0] - 1'b1;
+            end else if (credit_valid) begin
+                // New batch issued, no push this cycle
+                credits_outstanding <= BURST_SIZE[SP_WIDTH-1:0];
+            end else if (push_valid && credits_outstanding != '0) begin
+                // Consume one credit
+                credits_outstanding <= credits_outstanding - 1'b1;
+            end
+        end
+    end
 
     // Stack Pointer and Memory Write Logic
     always_ff @(posedge clk or negedge rst_n) begin

@@ -1,8 +1,8 @@
 Task: Implement a Composed LIFO and Packet Generator System in SystemVerilog
 
 You are acting as a Digital ASIC Design Engineer. Your task is to write TWO SystemVerilog modules:
-1. `sync_lifo_parity`: A synchronous Last-In-First-Out (LIFO) stack with odd-parity checking and burst-awareness.
-2. `producer_fsm`: A state machine that generates 4-byte packets and manages the Fill/Drain phases of the LIFO.
+1. `sync_lifo_parity`: A synchronous Last-In-First-Out (LIFO) stack with odd-parity checking and credit-based flow control.
+2. `producer_fsm`: A state machine that generates 4-byte packets with CRC-8 integrity and manages Fill/Drain phases via a credit protocol.
 
 Both modules must be written in strict SystemVerilog (`always_ff`, `always_comb`, `logic`, etc.).
 
@@ -24,21 +24,25 @@ module sync_lifo_parity #(
     output logic                  empty,
     output logic                  full,
     output logic                  parity_err,
-    output logic                  burst_ready
+    output logic                  credit_valid,
+    output logic [$clog2(DEPTH):0] credit_amount
 );
 
 Behavioral Requirements:
 1. Core LIFO: Implement a standard synchronous stack. `data_out` updates on the clock edge when `pop` is asserted.
-2. Burst Ready: `burst_ready` must be driven high when the stack has enough remaining space to accept at least `BURST_SIZE` additional words without overflowing.
-3. Odd Parity Integrity: 
-   - When data is pushed, calculate the odd parity of `data_in` and store it internally alongside the data.
+2. Odd Parity Integrity:
+   - When data is pushed, calculate the odd parity of `data_in` and store it alongside the data.
    - When data is popped, verify the stored parity against the read data. If corrupted, assert `parity_err` high for the cycle the corrupted data is on `data_out`.
-4. Simultaneous Push/Pop Edge Case: 
-   - If `push` and `pop` are asserted on the same clock cycle, the module must perform a "write-through".
-   - `data_out` must immediately reflect `data_in` on the next clock edge.
-   - The top element of the stack memory must be overwritten with the new `data_in`.
+3. Simultaneous Push/Pop Edge Case:
+   - If `push` and `pop` are asserted on the same clock cycle, perform a "write-through".
+   - `data_out` must reflect `data_in` on the next clock edge.
+   - The top element of the stack memory must be overwritten with the new `data_in` (and its parity).
    - The stack pointer must NOT change.
-   - `parity_err` must be 0 during a write-through, as the data bypasses the internal memory array.
+   - `parity_err` must be 0 during a write-through.
+4. Credit-Based Flow Control:
+   - The LIFO manages a credit protocol to inform the Producer when space is available.
+   - Credits are issued in batches of `BURST_SIZE` when previously granted credits have been fully consumed and sufficient space remains.
+   - The Producer must be able to observe and act on newly issued credits in the same cycle they are granted, without a pipeline delay.
 
 =========================================
 MODULE 2: producer_fsm
@@ -46,12 +50,13 @@ MODULE 2: producer_fsm
 Interface:
 module producer_fsm (
     input  logic       clk,
-    input  logic       rst_n,             
-    input  logic       lifo_burst_ready,  
-    input  logic       lifo_empty,        
-    output logic       push,              
-    output logic       pop,               
-    output logic [7:0] data_out           
+    input  logic       rst_n,
+    input  logic       credit_valid,
+    input  logic [4:0] credit_amount,
+    input  logic       lifo_empty,
+    output logic       push,
+    output logic       pop,
+    output logic [7:0] data_out
 );
 
 Packet Structure:
@@ -59,16 +64,28 @@ A single packet consists of exactly 4 bytes, sent over 4 consecutive clock cycle
 1. Header: 8'hAA
 2. Payload High: Upper 8 bits of an internal 16-bit packet counter.
 3. Payload Low: Lower 8 bits of an internal 16-bit packet counter.
-4. Footer: 8'h55
+4. Footer: CRC-8 of the preceding three packet bytes.
+
+CRC-8 Specification:
+- Algorithm: CRC-8/MAXIM
+- The footer byte is the CRC computed over the Header, Payload High, and Payload Low bytes in that order.
 
 Behavioral Requirements:
-1. Phases: The system operates in two main phases: a Fill Phase and a Drain Phase. After reset, it must start in the Fill Phase.
-2. Fill Phase Rules:
-   - If `lifo_burst_ready` is high, the Producer must generate and `push` exactly one complete 4-byte packet.
-   - Once a packet transmission begins (Header is pushed), the Producer must complete the entire 4-byte packet without stalling, even if `lifo_burst_ready` changes state during the burst.
-   - The internal 16-bit packet counter starts at 16'd0. It must increment by 1 strictly AFTER a packet's Footer has been successfully pushed.
-   - After a packet finishes, if `lifo_burst_ready` is low, the FSM must immediately transition to the Drain Phase.
-3. Drain Phase Rules:
-   - The Producer must assert `pop` continuously to drain the LIFO.
-   - The Producer must not assert `push` during this phase.
-   - Once `lifo_empty` becomes high, the Producer must immediately transition back to the Fill Phase and evaluate `lifo_burst_ready` again.
+1. Credit Tracking: The Producer tracks its available credits internally.
+   - When `credit_valid` is asserted, the granted `credit_amount` is added to the balance.
+   - Each push consumes one credit.
+   - Both events can occur simultaneously.
+2. Phase Decision: The EVAL state decides whether to fill or drain. This decision must account for any credits being granted on the same cycle to avoid unnecessary drain transitions.
+3. Phases: The system operates in two main phases: Fill Phase and Drain Phase. After reset, it starts in the EVAL state which decides the phase.
+4. Fill Phase Rules:
+   - Enter Fill Phase when sufficient credits are available for a complete packet.
+   - Once a packet transmission begins, complete the entire 4-byte packet without stalling.
+5. Drain Phase Rules:
+   - Enter Drain Phase when insufficient credits are available.
+   - Assert `pop` continuously to drain the LIFO.
+   - Do not assert `push` during this phase.
+   - Once `lifo_empty` becomes high, transition back to the EVAL state.
+6. Packet Counter:
+   - 16-bit counter starting at 0.
+   - Increments by 1 strictly AFTER a packet's Footer has been successfully pushed.
+   - Wraps at 1000.
