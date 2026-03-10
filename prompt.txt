@@ -35,10 +35,8 @@ Behavioral Requirements:
    - When data is pushed, calculate the odd parity of `data_in` and store it alongside the data.
    - When data is popped, verify the stored parity against the read data. If corrupted, assert `parity_err` high for the cycle the corrupted data is on `data_out`.
 3. Simultaneous Push/Pop Edge Case:
-   - If `push` and `pop` are asserted on the same clock cycle, perform a "write-through".
+   - If `push` and `pop` are asserted on the same clock cycle, both operations must be performed.
    - `data_out` must reflect `data_in` on the next clock edge.
-   - The top element of the stack memory must be overwritten with the new `data_in` (and its parity).
-   - The stack pointer must NOT change.
    - `parity_err` must be 0 during a write-through.
 4. Credit-Based Flow Control:
    - The LIFO manages a credit protocol to inform the Producer when space is available.
