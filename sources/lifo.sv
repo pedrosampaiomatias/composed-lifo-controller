@@ -88,7 +88,7 @@ module sync_lifo_parity #(
         if (!rst_n) begin
             sp <= '0;
         end else begin
-            unique case ({push_valid, pop_valid})
+            case ({push_valid, pop_valid})
                 2'b10: begin // Push only
                     mem[sp] <= write_word;
                     sp <= sp + 1'b1;
@@ -100,7 +100,6 @@ module sync_lifo_parity #(
                     // Replace the top of the stack with the new word+parity
                     mem[sp-1] <= write_word; 
                 end
-                default: ; 
             endcase
         end
     end
