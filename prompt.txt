@@ -1,9 +1,10 @@
 Task: Implement a Composed LIFO and Packet Generator System in SystemVerilog
 
 You are acting as a Digital ASIC Design Engineer. Your task is to write TWO SystemVerilog modules:
-1. `sync_lifo_parity`: A synchronous Last-In-First-Out (LIFO) stack with odd-parity checking and credit-based flow control.
-2. `producer_fsm`: A state machine that generates 4-byte packets with CRC-8 integrity and manages Fill/Drain phases via a credit protocol.
+1. `sync_lifo_parity`: A synchronous Last-In-First-Out (LIFO) stack with odd-parity checking and credit-based flow control. Create the file "sources/lifo.sv"
+2. `producer_fsm`: A state machine that generates 4-byte packets with CRC-8 integrity and manages Fill/Drain phases via a credit protocol. Create the file "sources/producer_fsm.sv"
 
+Both modules are connected as presented in the file "sources/top_composed.sv".
 Both modules must be written in strict SystemVerilog (`always_ff`, `always_comb`, `logic`, etc.).
 
 =========================================
