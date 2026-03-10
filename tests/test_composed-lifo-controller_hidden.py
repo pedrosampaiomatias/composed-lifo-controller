@@ -161,6 +161,9 @@ async def test_credit_issuance(dut):
             saw_credit_valid = True
             credit_grants.append(ca)
             dut._log.info(f"Cycle {cycle}: credit_valid pulse, amount={ca}")
+        else:
+            assert ca == 0, \
+                f"Cycle {cycle}: credit_amount should be 0 when credit_valid=0, got {ca}"
 
         if push == 1:
             push_count += 1
