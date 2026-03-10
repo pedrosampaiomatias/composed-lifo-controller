@@ -41,7 +41,7 @@ Behavioral Requirements:
 4. Credit-Based Flow Control:
    - The LIFO manages a credit protocol to inform the Producer when space is available.
    - `credit_valid` and `credit_amount` are combinational outputs (not registered).
-   - Credits are issued in batches of `BURST_SIZE` when previously granted credits have been fully consumed and sufficient space remains.
+   - Credits are issued when previously granted credits have been fully consumed and sufficient space (at least `BURST_SIZE` entries) remains in the LIFO.
    - The Producer must be able to observe and act on newly issued credits in the same cycle they are granted, without a pipeline delay.
 
 =========================================
